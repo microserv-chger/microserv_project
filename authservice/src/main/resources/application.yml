@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:eco_label}
+    username: ${DB_USERNAME:eco_user}
+    password: ${DB_PASSWORD:eco_pass}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER:http://localhost:8761/eureka}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:ThisIsADevelopmentSecretKeyForEcoLabelMS123456789}
+    ttl-seconds: 7200
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+

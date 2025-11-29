@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+  - job_name: eco-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - authservice:8080
+          - parserproduitservice:8081
+          - nlpingredientservice:8082
+          - lcaliteservice:8083
+          - scoringservice:8084
+          - widgetapi:8085
+          - eureka:8761
+
