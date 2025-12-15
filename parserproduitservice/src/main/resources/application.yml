@@ -41,5 +41,8 @@ management:
   endpoint:
     health:
       show-details: when_authorized
-*** End Patch
+
+ml:
+  service:
+    url: ${ML_SERVICE_URL:http://localhost:8086}
 

@@ -19,8 +19,11 @@ public class ProductParseRequest {
 
 	private String packaging;
 
-	@NotBlank
 	private String rawText;
+
+	// Support pour OCR/PDF via ML service
+	private String imageBase64; // Image encodée en base64 pour OCR
+	private String pdfBase64;   // PDF encodé en base64 pour parsing
 
 	public String getGtin() {
 		return gtin;
@@ -68,6 +71,22 @@ public class ProductParseRequest {
 
 	public void setRawText(String rawText) {
 		this.rawText = rawText;
+	}
+
+	public String getImageBase64() {
+		return imageBase64;
+	}
+
+	public void setImageBase64(String imageBase64) {
+		this.imageBase64 = imageBase64;
+	}
+
+	public String getPdfBase64() {
+		return pdfBase64;
+	}
+
+	public void setPdfBase64(String pdfBase64) {
+		this.pdfBase64 = pdfBase64;
 	}
 }
 

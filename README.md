@@ -8,8 +8,9 @@ Plateforme microservices pour le calcul du score environnemental des produits. L
 | --- | --- | --- |
 | `eureka` | 8761 | Registre Eureka (service discovery & load balancer). |
 | `authservice` | 8080 | Gestion des comptes et JWT pour sécuriser les API. |
-| `parserproduitservice` | 8081 | Ingestion et normalisation textuelle des fiches produits. Publie `product.parsed`. |
-| `nlpingredientservice` | 8082 | Extraction & standardisation des ingrédients, publie `ingredients.normalized`. |
+| `ml-service` | 8086 | **Service Python ML/IA** : OCR (Tesseract), NLP (spaCy + BERT) pour extraction intelligente. |
+| `parserproduitservice` | 8081 | Ingestion et normalisation textuelle des fiches produits. **Utilise ML pour OCR/PDF**. Publie `product.parsed`. |
+| `nlpingredientservice` | 8082 | Extraction & standardisation des ingrédients **via ML (spaCy/BERT)**. Publie `ingredients.normalized`. |
 | `lcaliteservice` | 8083 | Calcul ACV simplifié et publication `lca.completed`. |
 | `scoringservice` | 8084 | Agrégation des indicateurs et émission du score final via `score.published`. |
 | `widgetapi` | 8085 | API publique/GraphQL Ready fournissant le score et l'explication aux widgets. |
@@ -18,8 +19,8 @@ Kafka est utilisé comme bus d’événements pour assurer le chaînage Parser �
 
 ### Flux fonctionnel (haut niveau)
 
-1. **Ingestion produit** (`parserproduitservice`) : reçoit la fiche produit, persiste les métadonnées et publie `product.parsed` sur Kafka.
-2. **NLP ingrédients** (`nlpingredientservice`) : consomme `product.parsed`, extrait les ingrédients normalisés et publie `ingredients.normalized`.
+1. **Ingestion produit** (`parserproduitservice`) : reçoit la fiche produit (texte, image base64, ou PDF base64). Si image/PDF fourni, **appelle le service ML pour OCR** (Tesseract) ou parsing PDF. Enrichit les métadonnées (marque, origine) via **NLP du service ML**. Persiste les métadonnées et publie `product.parsed` sur Kafka.
+2. **NLP ingrédients** (`nlpingredientservice`) : consomme `product.parsed`, **appelle le service ML (spaCy + BERT)** pour extraire intelligemment les ingrédients avec catégories et confiance. Fallback sur regex si ML indisponible. Publie `ingredients.normalized`.
 3. **ACV simplifiée** (`lcaliteservice`) : consomme `ingredients.normalized`, calcule les indicateurs ACV (CO₂, eau, énergie) et publie `lca.completed`.
 4. **Scoring** (`scoringservice`) : consomme `lca.completed`, calcule un score numérique (0–100) et une lettre `A–E`, persiste le résultat et publie `score.published`.
 5. **Exposition publique** (`widgetapi`) : consomme `score.published` et expose le score final via `GET /public/product/{id}`.
@@ -75,7 +76,7 @@ curl -X POST http://localhost:8080/auth/register \
      -d '{"username":"analyste","email":"analyste@example.com","password":"EcoLabel!1"}'
 ```
 
-2. **Envoyer une fiche produit**
+2. **Envoyer une fiche produit** (avec texte brut)
 
 ```bash
 curl -X POST http://localhost:8081/product/parse \
@@ -83,6 +84,20 @@ curl -X POST http://localhost:8081/product/parse \
      -H "Content-Type: application/json" \
      -d '{"gtin":"3017620425035","name":"Pâte à tartiner","brand":"EcoDelice","originCountry":"FR","packaging":"verre","rawText":"sucre, huile de palme, noisettes 13%, cacao maigre"}'
 ```
+
+3. **Envoyer une image pour OCR** (extraction automatique via ML)
+
+```bash
+# Encoder une image en base64
+IMAGE_B64=$(base64 -w 0 path/to/product_label.jpg)
+
+curl -X POST http://localhost:8081/product/parse \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d "{\"gtin\":\"3017620425035\",\"name\":\"Pâte à tartiner\",\"imageBase64\":\"$IMAGE_B64\"}"
+```
+
+Le service ML extraira automatiquement le texte de l'image et enrichira les métadonnées.
 
 Les événements issus de Kafka propagent ensuite les données jusqu'à `widgetapi`. Vérifiez le score public :
 
@@ -103,10 +118,32 @@ Chaque service expose `/actuator/health` et `/actuator/prometheus`. Prometheus s
 - **Sécurité** : la clé `JWT_SECRET` est fournie pour le développement. En production, utilisez un secret long stocké dans un gestionnaire de secrets (Vault, AWS Secrets Manager, etc.).
 - **Scalabilité** : chaque microservice peut être répliqué derrière Eureka + un API Gateway (Zuul, Spring Cloud Gateway, Traefik…).
 
+## Machine Learning / IA
+
+Le projet intègre un **microservice Python** (`ml-service`) utilisant :
+
+- **OCR** : Tesseract pour extraire le texte d'images (étiquettes produits, photos)
+- **Parsing PDF** : pdfplumber pour extraire le texte de fiches produits PDF
+- **NLP avancé** : 
+  - **spaCy** (modèle français/anglais) pour la reconnaissance d'entités nommées (ingrédients, marques, origines)
+  - **BERT multilingue** (`dbmdz/bert-base-french-europeana-cased`) pour l'extraction d'ingrédients avec scores de confiance
+- **Classification intelligente** : catégorisation automatique des ingrédients (DAIRY, SWEETENER, PACKAGING, etc.)
+
+**Utilisation** :
+- `parserproduitservice` appelle `/ocr/image` ou `/ocr/pdf` si une image/PDF est fournie
+- `nlpingredientservice` appelle `/nlp/extract-ingredients` pour l'extraction ML, avec fallback sur regex si le service est indisponible
+
+**Endpoints ML** :
+- `POST /ocr/image` : extraction texte d'une image (base64)
+- `POST /ocr/pdf` : extraction texte d'un PDF (base64)
+- `POST /nlp/extract-ingredients` : extraction ingrédients avec ML
+- `POST /nlp/extract-metadata` : extraction métadonnées (marque, origine)
+- `GET /health` : état des modèles ML chargés
+
 ## Points d'extension
 
-- Intégration OCR (Tesseract) et modèles NLP Python via gRPC ou REST.
 - Enrichissement ACV avec les référentiels FAO/Ademe.
 - Ajout du microservice `Provenance` (DVC + MLflow) pour tracer la lignée des données.
 - Sécurisation inter-services par OAuth2 client credentials / mTLS.
+- Fine-tuning des modèles BERT sur un dataset d'ingrédients français.
 

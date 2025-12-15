@@ -73,6 +73,15 @@ services:
     ports:
       - "8080:8080"
 
+  ml-service:
+    build:
+      context: ./ml-service
+    ports:
+      - "8086:8086"
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Note: Le service ML peut être lent au démarrage (téléchargement des modèles)
+
   parserproduitservice:
     build:
       context: ./parserproduitservice
@@ -80,6 +89,7 @@ services:
       - kafka
       - postgres
       - eureka
+      - ml-service
     environment:
       - DB_HOST=postgres
       - DB_USERNAME=eco_user
@@ -87,6 +97,7 @@ services:
       - DB_NAME=eco_label
       - EUREKA_SERVER=http://eureka:8761/eureka
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - ML_SERVICE_URL=http://ml-service:8086
     ports:
       - "8081:8081"
 
@@ -97,6 +108,7 @@ services:
       - kafka
       - postgres
       - eureka
+      - ml-service
     environment:
       - DB_HOST=postgres
       - DB_USERNAME=eco_user
@@ -104,6 +116,7 @@ services:
       - DB_NAME=eco_label
       - EUREKA_SERVER=http://eureka:8761/eureka
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - ML_SERVICE_URL=http://ml-service:8086
     ports:
       - "8082:8082"
 

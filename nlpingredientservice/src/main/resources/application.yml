@@ -36,3 +36,7 @@ management:
       exposure:
         include: health,info,metrics,prometheus
 
+ml:
+  service:
+    url: ${ML_SERVICE_URL:http://localhost:8086}
+
