@@ -118,7 +118,7 @@ def extract_ingredients_nlp(text: str) -> List[Dict]:
                 ingredients.append({
                     "name": ent.text.strip(),
                     "category": classify_ingredient_ml(ent.text),
-                    "confidence": 0.7
+                    "confidence": float(0.7)  # S'assurer que c'est un float Python
                 })
         
         # Extraire les noms communs (NOUN) qui pourraient être des ingrédients
@@ -129,20 +129,45 @@ def extract_ingredients_nlp(text: str) -> List[Dict]:
                     ingredients.append({
                         "name": token.text.strip(),
                         "category": classify_ingredient_ml(token.text),
-                        "confidence": 0.5
+                        "confidence": float(0.5)  # S'assurer que c'est un float Python
                     })
     
     # Utiliser BERT NER si disponible
     if ner_pipeline:
         try:
             ner_results = ner_pipeline(text_clean[:512])  # Limiter la longueur
+            # Grouper les tokens BERT qui commencent par ## (sous-mots)
+            current_entity = None
             for entity in ner_results:
-                if entity.get("score", 0) > 0.5:
-                    ingredients.append({
-                        "name": entity["word"].strip(),
-                        "category": classify_ingredient_ml(entity["word"]),
-                        "confidence": entity.get("score", 0.5)
-                    })
+                score = entity.get("score", 0.5)
+                # Convertir float32 numpy en float Python pour JSON serialization
+                if hasattr(score, 'item'):
+                    score = float(score.item())
+                else:
+                    score = float(score)
+                
+                word = entity.get("word", "").strip()
+                # Si le token commence par ##, c'est la suite d'un mot précédent
+                if word.startswith("##"):
+                    if current_entity:
+                        # Concaténer avec l'entité précédente
+                        current_entity["name"] += word[2:]  # Enlever ##
+                        current_entity["confidence"] = max(current_entity["confidence"], score)
+                    continue
+                
+                # Nouvelle entité
+                if score > 0.5:
+                    if current_entity:
+                        ingredients.append(current_entity)
+                    current_entity = {
+                        "name": word,
+                        "category": classify_ingredient_ml(word),
+                        "confidence": score
+                    }
+            
+            # Ajouter la dernière entité
+            if current_entity:
+                ingredients.append(current_entity)
         except Exception as e:
             logging.warning(f"BERT NER error: {e}")
     
@@ -158,7 +183,7 @@ def extract_ingredients_nlp(text: str) -> List[Dict]:
                     ingredients.append({
                         "name": part,
                         "category": classify_ingredient_ml(part),
-                        "confidence": 0.4
+                        "confidence": float(0.4)  # S'assurer que c'est un float Python
                     })
     
     # Dédupliquer et nettoyer
@@ -222,14 +247,23 @@ def detect_organic_label(text: str) -> bool:
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check"""
-    return jsonify({
+    """Health check - endpoint utilisé par les autres services pour vérifier la disponibilité"""
+    health_status = {
         "status": "UP",
         "tesseract": TESSERACT_AVAILABLE,
         "pdf": PDF_AVAILABLE,
         "nlp": NLP_AVAILABLE and nlp_model is not None,
-        "bert": ner_pipeline is not None
-    })
+        "bert": ner_pipeline is not None,
+        "ready": True  # Indique que le service est prêt à recevoir des requêtes
+    }
+    
+    # Si aucun modèle n'est disponible, le service n'est pas vraiment "ready"
+    if not TESSERACT_AVAILABLE and not PDF_AVAILABLE and not (NLP_AVAILABLE and nlp_model):
+        health_status["ready"] = False
+        health_status["status"] = "DEGRADED"
+    
+    status_code = 200 if health_status["ready"] else 503
+    return jsonify(health_status), status_code
 
 
 @app.route('/ocr/image', methods=['POST'])
@@ -237,14 +271,24 @@ def ocr_image():
     """
     Extrait le texte d'une image via OCR
     Body: { "image": "base64_encoded_image" }
+    Retourne: { "text": "...", "method": "tesseract_ocr" }
     """
     try:
         data = request.json
         if not data or "image" not in data:
             return jsonify({"error": "Missing 'image' field (base64)"}), 400
         
+        if not TESSERACT_AVAILABLE:
+            return jsonify({"error": "Tesseract OCR not available"}), 503
+        
         image_b64 = data["image"]
-        image_data = base64.b64decode(image_b64)
+        if not image_b64 or not isinstance(image_b64, str):
+            return jsonify({"error": "Invalid image data (must be base64 string)"}), 400
+        
+        try:
+            image_data = base64.b64decode(image_b64)
+        except Exception as e:
+            return jsonify({"error": f"Invalid base64 encoding: {str(e)}"}), 400
         
         text = extract_text_from_image(image_data)
         
@@ -252,9 +296,12 @@ def ocr_image():
             "text": text,
             "method": "tesseract_ocr"
         })
+    except ValueError as e:
+        logging.error(f"OCR validation error: {e}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logging.error(f"OCR error: {e}")
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"OCR error: {e}", exc_info=True)
+        return jsonify({"error": f"OCR processing failed: {str(e)}"}), 500
 
 
 @app.route('/ocr/pdf', methods=['POST'])
@@ -262,14 +309,24 @@ def ocr_pdf():
     """
     Extrait le texte d'un PDF
     Body: { "pdf": "base64_encoded_pdf" }
+    Retourne: { "text": "...", "method": "pdfplumber" }
     """
     try:
         data = request.json
         if not data or "pdf" not in data:
             return jsonify({"error": "Missing 'pdf' field (base64)"}), 400
         
+        if not PDF_AVAILABLE:
+            return jsonify({"error": "PDF parsing not available"}), 503
+        
         pdf_b64 = data["pdf"]
-        pdf_data = base64.b64decode(pdf_b64)
+        if not pdf_b64 or not isinstance(pdf_b64, str):
+            return jsonify({"error": "Invalid PDF data (must be base64 string)"}), 400
+        
+        try:
+            pdf_data = base64.b64decode(pdf_b64)
+        except Exception as e:
+            return jsonify({"error": f"Invalid base64 encoding: {str(e)}"}), 400
         
         text = extract_text_from_pdf(pdf_data)
         
@@ -277,9 +334,12 @@ def ocr_pdf():
             "text": text,
             "method": "pdfplumber"
         })
+    except ValueError as e:
+        logging.error(f"PDF validation error: {e}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logging.error(f"PDF parsing error: {e}")
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"PDF parsing error: {e}", exc_info=True)
+        return jsonify({"error": f"PDF processing failed: {str(e)}"}), 500
 
 
 @app.route('/nlp/extract-ingredients', methods=['POST'])
@@ -287,6 +347,8 @@ def extract_ingredients():
     """
     Extrait les ingrédients d'un texte avec ML (spaCy + BERT)
     Body: { "text": "texte brut" }
+    Retourne: { "ingredients": [...], "organic": bool, "count": int, "method": "..." }
+    Format ingrédient: { "name": "...", "category": "...", "confidence": float }
     """
     try:
         data = request.json
@@ -294,6 +356,17 @@ def extract_ingredients():
             return jsonify({"error": "Missing 'text' field"}), 400
         
         text = data["text"]
+        if not isinstance(text, str):
+            return jsonify({"error": "Field 'text' must be a string"}), 400
+        
+        if not text or not text.strip():
+            return jsonify({
+                "ingredients": [],
+                "organic": False,
+                "count": 0,
+                "method": "empty_input"
+            })
+        
         ingredients = extract_ingredients_nlp(text)
         
         # Détecter si bio
@@ -303,11 +376,11 @@ def extract_ingredients():
             "ingredients": ingredients,
             "organic": is_organic,
             "count": len(ingredients),
-            "method": "spacy_bert" if NLP_AVAILABLE else "fallback"
+            "method": "spacy_bert" if (NLP_AVAILABLE and nlp_model) else "fallback"
         })
     except Exception as e:
-        logging.error(f"NLP extraction error: {e}")
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"NLP extraction error: {e}", exc_info=True)
+        return jsonify({"error": f"Ingredient extraction failed: {str(e)}"}), 500
 
 
 @app.route('/nlp/extract-metadata', methods=['POST'])
@@ -315,6 +388,7 @@ def extract_metadata():
     """
     Extrait les métadonnées d'un produit (nom, marque, origine, etc.) via NLP
     Body: { "text": "texte brut" }
+    Retourne: { "metadata": {"brand": "...", "origin": "..."}, "method": "..." }
     """
     try:
         data = request.json
@@ -322,33 +396,45 @@ def extract_metadata():
             return jsonify({"error": "Missing 'text' field"}), 400
         
         text = data["text"]
+        if not isinstance(text, str):
+            return jsonify({"error": "Field 'text' must be a string"}), 400
+        
         metadata = {}
         
-        if nlp_model:
-            doc = nlp_model(text)
-            
-            # Extraire les entités nommées
-            for ent in doc.ents:
-                if ent.label_ == "ORG":
-                    if "brand" not in metadata:
-                        metadata["brand"] = ent.text
-                elif ent.label_ == "GPE" or ent.label_ == "LOC":
-                    if "origin" not in metadata:
-                        metadata["origin"] = ent.text
+        if nlp_model and text.strip():
+            try:
+                doc = nlp_model(text)
+                
+                # Extraire les entités nommées
+                for ent in doc.ents:
+                    if ent.label_ == "ORG":
+                        if "brand" not in metadata:
+                            metadata["brand"] = ent.text.strip()
+                    elif ent.label_ == "GPE" or ent.label_ == "LOC":
+                        if "origin" not in metadata:
+                            metadata["origin"] = ent.text.strip()
+            except Exception as e:
+                logging.warning(f"spaCy processing error: {e}")
         
-        # Patterns regex pour métadonnées
-        origin_pattern = r'(origine|origin|pays|country)[\s:]+([A-Z][a-z]+)'
-        match = re.search(origin_pattern, text, re.IGNORECASE)
-        if match and "origin" not in metadata:
-            metadata["origin"] = match.group(2)
+        # Patterns regex pour métadonnées (fallback ou complément)
+        if text:
+            origin_pattern = r'(origine|origin|pays|country)[\s:]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)'
+            match = re.search(origin_pattern, text, re.IGNORECASE)
+            if match and "origin" not in metadata:
+                metadata["origin"] = match.group(2).strip()
+            
+            brand_pattern = r'(marque|brand)[\s:]+([A-Z][a-zA-Z0-9\s]+)'
+            match = re.search(brand_pattern, text, re.IGNORECASE)
+            if match and "brand" not in metadata:
+                metadata["brand"] = match.group(2).strip()
         
         return jsonify({
             "metadata": metadata,
             "method": "spacy_nlp" if nlp_model else "regex"
         })
     except Exception as e:
-        logging.error(f"Metadata extraction error: {e}")
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"Metadata extraction error: {e}", exc_info=True)
+        return jsonify({"error": f"Metadata extraction failed: {str(e)}"}), 500
 
 
 if __name__ == '__main__':
