@@ -417,21 +417,29 @@ def extract_metadata():
                 logging.warning(f"spaCy processing error: {e}")
         
         # Patterns regex pour métadonnées (fallback ou complément)
+        # Patterns regex pour métadonnées (fallback ou complément)
         if text:
-            origin_pattern = r'(origine|origin|pays|country)[\s:]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)'
+            origin_pattern = r'(?:origine|origin|pays|country)[\s:]+([A-Z][a-z]+)'
             match = re.search(origin_pattern, text, re.IGNORECASE)
             if match and "origin" not in metadata:
-                metadata["origin"] = match.group(2).strip()
+                metadata["origin"] = match.group(1).strip()
             
-            brand_pattern = r'(marque|brand)[\s:]+([A-Z][a-zA-Z0-9\s]+)'
+            brand_pattern = r'(?:marque|brand)[\s:]+([A-Z][a-zA-Z0-9]+)'
             match = re.search(brand_pattern, text, re.IGNORECASE)
             if match and "brand" not in metadata:
-                metadata["brand"] = match.group(2).strip()
-        
+                metadata["brand"] = match.group(1).strip()
+
+        # 🔴 ADD THIS BLOCK RIGHT HERE
+        # Defensive cleanup to avoid greedy matches
+        for k in metadata:
+            if isinstance(metadata[k], str):
+                metadata[k] = metadata[k].strip().split()[0]
+
         return jsonify({
             "metadata": metadata,
             "method": "spacy_nlp" if nlp_model else "regex"
         })
+
     except Exception as e:
         logging.error(f"Metadata extraction error: {e}", exc_info=True)
         return jsonify({"error": f"Metadata extraction failed: {str(e)}"}), 500
