@@ -45,6 +45,7 @@ public class AuthService {
 		return new AuthResponse(token, saved.getRoles());
 	}
 
+	@Transactional
 	public AuthResponse login(LoginRequest request) {
 		authenticationManager.authenticate(
 				new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
@@ -52,5 +53,15 @@ public class AuthService {
 		String token = jwtService.generateToken(account.getUsername(), account.getRoles());
 		return new AuthResponse(token, account.getRoles());
 	}
-}
 
+	@Transactional(readOnly = true)
+	public com.example.authservice.dto.UserDto getUserByUsername(String username) {
+		UserAccount user = repository.findByUsername(username)
+				.orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
+						"User not found"));
+		// Force initialization of lazy collection by copying it
+		Set<String> initializedRoles = new java.util.HashSet<>(user.getRoles());
+		return new com.example.authservice.dto.UserDto(user.getId(), user.getUsername(), user.getEmail(),
+				initializedRoles, user.getCreatedAt());
+	}
+}

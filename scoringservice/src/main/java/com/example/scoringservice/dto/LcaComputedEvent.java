@@ -12,6 +12,9 @@ public class LcaComputedEvent {
 	private double energyMj;
 	private Instant calculatedAt;
 
+	public LcaComputedEvent() {
+	}
+
 	public UUID getProductId() {
 		return productId;
 	}
@@ -60,4 +63,3 @@ public class LcaComputedEvent {
 		this.calculatedAt = calculatedAt;
 	}
 }
-

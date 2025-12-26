@@ -21,6 +21,7 @@ public class UserAccountDetailsService implements UserDetailsService {
 	}
 
 	@Override
+	@org.springframework.transaction.annotation.Transactional(readOnly = true)
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 		return repository.findByUsername(username)
 				.map(user -> new User(user.getUsername(), user.getPassword(),
@@ -28,4 +29,3 @@ public class UserAccountDetailsService implements UserDetailsService {
 				.orElseThrow(() -> new UsernameNotFoundException("User not found"));
 	}
 }
-

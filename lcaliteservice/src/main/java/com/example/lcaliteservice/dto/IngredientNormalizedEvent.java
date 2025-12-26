@@ -8,6 +8,9 @@ public class IngredientNormalizedEvent {
 	private UUID productId;
 	private List<NormalizedIngredient> ingredients;
 
+	public IngredientNormalizedEvent() {
+	}
+
 	public UUID getProductId() {
 		return productId;
 	}
@@ -72,4 +75,3 @@ public class IngredientNormalizedEvent {
 		}
 	}
 }
-

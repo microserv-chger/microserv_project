@@ -14,6 +14,9 @@ public class ProductParsedEvent {
 	private String normalizedText;
 	private Instant parsedAt;
 
+	public ProductParsedEvent() {
+	}
+
 	public UUID getProductId() {
 		return productId;
 	}
@@ -78,4 +81,3 @@ public class ProductParsedEvent {
 		this.parsedAt = parsedAt;
 	}
 }
-

@@ -13,8 +13,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.authservice.dto.AuthResponse;
 import com.example.authservice.dto.LoginRequest;
 import com.example.authservice.dto.RegisterRequest;
-import com.example.authservice.entity.UserAccount;
-import com.example.authservice.repository.UserAccountRepository;
 import com.example.authservice.service.AuthService;
 
 @RestController
@@ -22,11 +20,9 @@ import com.example.authservice.service.AuthService;
 public class AuthController {
 
 	private final AuthService authService;
-	private final UserAccountRepository repository;
 
-	public AuthController(AuthService authService, UserAccountRepository repository) {
+	public AuthController(AuthService authService) {
 		this.authService = authService;
-		this.repository = repository;
 	}
 
 	@PostMapping("/register")
@@ -40,13 +36,10 @@ public class AuthController {
 	}
 
 	@GetMapping("/me")
-	public ResponseEntity<UserAccount> me(@AuthenticationPrincipal UserDetails userDetails) {
+	public ResponseEntity<com.example.authservice.dto.UserDto> me(@AuthenticationPrincipal UserDetails userDetails) {
 		if (userDetails == null) {
 			return ResponseEntity.status(401).build();
 		}
-		return repository.findByUsername(userDetails.getUsername())
-				.map(ResponseEntity::ok)
-				.orElse(ResponseEntity.notFound().build());
+		return ResponseEntity.ok(authService.getUserByUsername(userDetails.getUsername()));
 	}
 }
-

@@ -14,6 +14,9 @@ public class ScorePublishedEvent {
 	private List<String> explanations;
 	private Instant calculatedAt;
 
+	public ScorePublishedEvent() {
+	}
+
 	public UUID getProductId() {
 		return productId;
 	}
@@ -70,4 +73,3 @@ public class ScorePublishedEvent {
 		this.calculatedAt = calculatedAt;
 	}
 }
-
