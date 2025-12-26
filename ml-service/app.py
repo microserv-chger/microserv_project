@@ -95,6 +95,66 @@ def extract_text_from_pdf(pdf_data: bytes) -> str:
     return "\n".join(text_parts)
 
 
+def extract_ingredients_section(text: str) -> str:
+    """
+    Extrait uniquement la section des ingrédients d'un texte.
+    Filtre les métadonnées comme Product, Brand, Origin, etc.
+    """
+    if not text or not text.strip():
+        return ""
+    
+    text_clean = text.strip()
+    
+    # Patterns pour trouver la section des ingrédients (français et anglais)
+    ingredients_patterns = [
+        r'(?:ingr[ée]dients?|ingredients?)\s*[:\-]?\s*(.+)',
+        r'(?:composition)\s*[:\-]?\s*(.+)',
+        r'(?:contient|contains)\s*[:\-]?\s*(.+)',
+    ]
+    
+    for pattern in ingredients_patterns:
+        match = re.search(pattern, text_clean, re.IGNORECASE | re.DOTALL)
+        if match:
+            ingredients_text = match.group(1).strip()
+            # Arrêter si on trouve une autre section (comme "Allergènes:", "Nutrition:", etc.)
+            stop_patterns = [
+                r'\n\s*(?:allerg[èe]nes?|allergens?|nutrition|valeurs?|conservation|storage)',
+                r'\n\s*(?:poids|weight|volume|contenance)',
+                r'\n\s*(?:à consommer|best before|use by)',
+            ]
+            for stop_pattern in stop_patterns:
+                stop_match = re.search(stop_pattern, ingredients_text, re.IGNORECASE)
+                if stop_match:
+                    ingredients_text = ingredients_text[:stop_match.start()].strip()
+            
+            return ingredients_text
+    
+    # Si pas de section "Ingrédients:" trouvée, retourner le texte tel quel
+    # mais seulement si ça ne ressemble pas à des métadonnées structurées
+    lines = text_clean.split('\n')
+    filtered_lines = []
+    
+    # Mots clés de métadonnées à exclure
+    metadata_keywords = [
+        'product', 'produit', 'brand', 'marque', 'origin', 'origine',
+        'name', 'nom', 'manufacturer', 'fabricant', 'country', 'pays',
+        'weight', 'poids', 'volume', 'ean', 'upc', 'barcode', 'code'
+    ]
+    
+    for line in lines:
+        line_lower = line.lower().strip()
+        # Ignorer les lignes de métadonnées
+        is_metadata = False
+        for kw in metadata_keywords:
+            if line_lower.startswith(kw) and ':' in line:
+                is_metadata = True
+                break
+        if not is_metadata and line.strip():
+            filtered_lines.append(line)
+    
+    return ' '.join(filtered_lines)
+
+
 def extract_ingredients_nlp(text: str) -> List[Dict]:
     """
     Extrait les ingrédients d'un texte avec spaCy + BERT
@@ -103,23 +163,70 @@ def extract_ingredients_nlp(text: str) -> List[Dict]:
     if not text or not text.strip():
         return []
     
+    # IMPORTANT: D'abord extraire seulement la section des ingrédients
+    ingredients_text = extract_ingredients_section(text)
+    
+    if not ingredients_text:
+        return []
+    
     ingredients = []
     
     # Nettoyage basique
-    text_clean = re.sub(r'\s+', ' ', text).strip()
+    text_clean = re.sub(r'\s+', ' ', ingredients_text).strip()
     
-    # Utiliser spaCy si disponible
-    if nlp_model:
-        doc = nlp_model(text_clean)
+    # Méthode préférée: parsing par virgules/points-virgules (plus fiable pour les ingrédients)
+    # Les ingrédients sont typiquement séparés par des virgules
+    parts = re.split(r'[,;]\s*', text_clean)
+    
+    for part in parts:
+        part = part.strip()
+        # Ignorer les parties trop courtes ou vides
+        if len(part) < 2 or part.isdigit():
+            continue
         
-        # Extraire les entités nommées (ingrédients potentiels)
-        for ent in doc.ents:
-            if ent.label_ in ["ORG", "MISC", "PRODUCT"] or len(ent.text) > 3:
+        # Nettoyer le nom de l'ingrédient
+        # Supprimer les parenthèses et leur contenu pour le nom principal, mais garder pour sous-ingrédients
+        main_part = part
+        sub_ingredients = []
+        
+        # Extraire les sous-ingrédients entre parenthèses
+        paren_match = re.search(r'\(([^)]+)\)', part)
+        if paren_match:
+            sub_content = paren_match.group(1)
+            # Séparer les sous-ingrédients
+            sub_parts = re.split(r'[,;]\s*', sub_content)
+            for sub in sub_parts:
+                sub = sub.strip()
+                if len(sub) > 2 and not sub.isdigit():
+                    # Nettoyer les pourcentages
+                    sub = re.sub(r'\d+\s*%', '', sub).strip()
+                    if sub:
+                        sub_ingredients.append(sub)
+            # Retirer les parenthèses du nom principal
+            main_part = re.sub(r'\([^)]+\)', '', part).strip()
+        
+        # Nettoyer les pourcentages
+        main_part = re.sub(r'\d+\s*%', '', main_part).strip()
+        
+        if main_part and len(main_part) > 2:
+            ingredients.append({
+                "name": main_part.strip(),
+                "category": classify_ingredient_ml(main_part),
+                "confidence": float(0.8)
+            })
+        
+        # Ajouter les sous-ingrédients
+        for sub in sub_ingredients:
+            if not any(ing["name"].lower() == sub.lower() for ing in ingredients):
                 ingredients.append({
-                    "name": ent.text.strip(),
-                    "category": classify_ingredient_ml(ent.text),
-                    "confidence": float(0.7)  # S'assurer que c'est un float Python
+                    "name": sub.strip(),
+                    "category": classify_ingredient_ml(sub),
+                    "confidence": float(0.7)
                 })
+    
+    # Si le parsing par virgules n'a rien donné, essayer spaCy comme fallback
+    if not ingredients and nlp_model:
+        doc = nlp_model(text_clean)
         
         # Extraire les noms communs (NOUN) qui pourraient être des ingrédients
         for token in doc:
@@ -129,61 +236,7 @@ def extract_ingredients_nlp(text: str) -> List[Dict]:
                     ingredients.append({
                         "name": token.text.strip(),
                         "category": classify_ingredient_ml(token.text),
-                        "confidence": float(0.5)  # S'assurer que c'est un float Python
-                    })
-    
-    # Utiliser BERT NER si disponible
-    if ner_pipeline:
-        try:
-            ner_results = ner_pipeline(text_clean[:512])  # Limiter la longueur
-            # Grouper les tokens BERT qui commencent par ## (sous-mots)
-            current_entity = None
-            for entity in ner_results:
-                score = entity.get("score", 0.5)
-                # Convertir float32 numpy en float Python pour JSON serialization
-                if hasattr(score, 'item'):
-                    score = float(score.item())
-                else:
-                    score = float(score)
-                
-                word = entity.get("word", "").strip()
-                # Si le token commence par ##, c'est la suite d'un mot précédent
-                if word.startswith("##"):
-                    if current_entity:
-                        # Concaténer avec l'entité précédente
-                        current_entity["name"] += word[2:]  # Enlever ##
-                        current_entity["confidence"] = max(current_entity["confidence"], score)
-                    continue
-                
-                # Nouvelle entité
-                if score > 0.5:
-                    if current_entity:
-                        ingredients.append(current_entity)
-                    current_entity = {
-                        "name": word,
-                        "category": classify_ingredient_ml(word),
-                        "confidence": score
-                    }
-            
-            # Ajouter la dernière entité
-            if current_entity:
-                ingredients.append(current_entity)
-        except Exception as e:
-            logging.warning(f"BERT NER error: {e}")
-    
-    # Fallback: parsing par virgules/points-virgules si aucun modèle ML
-    if not ingredients:
-        parts = re.split(r'[,;]\s*', text_clean)
-        for part in parts:
-            part = part.strip()
-            if len(part) > 2 and not part.isdigit():
-                # Retirer les pourcentages
-                part = re.sub(r'\d+%', '', part).strip()
-                if part:
-                    ingredients.append({
-                        "name": part,
-                        "category": classify_ingredient_ml(part),
-                        "confidence": float(0.4)  # S'assurer que c'est un float Python
+                        "confidence": float(0.5)
                     })
     
     # Dédupliquer et nettoyer

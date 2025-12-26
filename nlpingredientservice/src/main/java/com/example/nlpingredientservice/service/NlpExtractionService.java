@@ -72,15 +72,16 @@ public class NlpExtractionService {
 	/**
 	 * Traite les résultats du service ML (spaCy + BERT)
 	 */
-	private List<NormalizedIngredient> processMlResults(UUID productId, MlServiceClient.MlIngredientResponse mlResponse) {
+	private List<NormalizedIngredient> processMlResults(UUID productId,
+			MlServiceClient.MlIngredientResponse mlResponse) {
 		List<NormalizedIngredient> saved = new ArrayList<>();
 		boolean isOrganic = mlResponse.isOrganic();
 
 		for (Map<String, Object> ingMap : mlResponse.getIngredients()) {
 			String name = (String) ingMap.get("name");
 			String category = (String) ingMap.getOrDefault("category", "OTHER");
-			Double confidence = ingMap.get("confidence") != null 
-					? ((Number) ingMap.get("confidence")).doubleValue() 
+			Double confidence = ingMap.get("confidence") != null
+					? ((Number) ingMap.get("confidence")).doubleValue()
 					: 0.5;
 
 			if (name == null || name.trim().isEmpty()) {
@@ -93,7 +94,7 @@ public class NlpExtractionService {
 			ingredient.setCategory(category);
 			ingredient.setEcoReference("EcoInvent-v1");
 			ingredient.setOrganic(isOrganic || confidence > 0.7); // Considérer bio si haute confiance
-			ingredient.setImpactHint(estimateImpact(category));
+			// Note: impactHint n'est PAS défini ici - c'est le rôle du service AVC
 			ingredient.setExtractedAt(Instant.now());
 			saved.add(repository.save(ingredient));
 		}
@@ -120,7 +121,7 @@ public class NlpExtractionService {
 			ingredient.setCategory(classifyIngredient(ingredientName));
 			ingredient.setEcoReference("EcoInvent-v1");
 			ingredient.setOrganic(isOrganic(token));
-			ingredient.setImpactHint(estimateImpact(ingredient.getCategory()));
+			// Note: impactHint n'est PAS défini ici - c'est le rôle du service AVC
 			ingredient.setExtractedAt(Instant.now());
 			saved.add(repository.save(ingredient));
 		}
@@ -165,4 +166,3 @@ public class NlpExtractionService {
 		return Character.toUpperCase(value.charAt(0)) + value.substring(1);
 	}
 }
-
