@@ -1,7 +1,10 @@
 package com.example.widgetapi.service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +31,13 @@ public class PublicScoreService {
 	}
 
 	@Transactional(readOnly = true)
+	public List<PublicScoreResponse> getAllScores() {
+		return repository.findAll().stream()
+				.map(this::toResponse)
+				.collect(Collectors.toList());
+	}
+
+	@Transactional(readOnly = true)
 	public Optional<PublicScoreResponse> findScore(UUID productId) {
 		return repository.findByProductId(productId)
 				.map(this::toResponse)
@@ -41,6 +51,9 @@ public class PublicScoreService {
 					existing.setScoreValue(score.getScoreValue());
 					existing.setScoreLetter(score.getScoreLetter());
 					existing.setConfidence(score.getConfidence());
+					existing.setCo2(score.getCo2());
+					existing.setWater(score.getWater());
+					existing.setEnergy(score.getEnergy());
 					existing.setExplanations(score.getExplanations());
 					existing.setCalculatedAt(score.getCalculatedAt());
 					return repository.save(existing);
@@ -55,16 +68,29 @@ public class PublicScoreService {
 					.getForEntity("http://scoring-service/score/product/{productId}",
 							PublicScoreResponse.class, productId);
 			return Optional.ofNullable(response.getBody());
-		}
-		catch (Exception ex) {
+		} catch (Exception ex) {
 			log.warn("Unable to fetch score from scoring-service via Eureka: {}", ex.getMessage());
 			return Optional.empty();
 		}
 	}
 
 	private PublicScoreResponse toResponse(PublicProductScore score) {
-		return new PublicScoreResponse(score.getProductId(), score.getId(), score.getScoreValue(),
-				score.getScoreLetter(), score.getConfidence(), score.getExplanations(), score.getCalculatedAt());
+		// Détacher explicitement la collection Hibernate pour éviter
+		// LazyInitializationException hors session
+		List<String> explanations = (score.getExplanations() != null)
+				? new ArrayList<>(score.getExplanations())
+				: new ArrayList<>();
+
+		return new PublicScoreResponse(
+				score.getProductId(),
+				score.getId(),
+				score.getScoreValue(),
+				score.getScoreLetter() != null ? score.getScoreLetter() : "N/A",
+				score.getConfidence(),
+				score.getCo2() != null ? score.getCo2() : 0.0,
+				score.getWater() != null ? score.getWater() : 0.0,
+				score.getEnergy() != null ? score.getEnergy() : 0.0,
+				explanations,
+				score.getCalculatedAt());
 	}
 }
-

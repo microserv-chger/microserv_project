@@ -29,9 +29,11 @@ public class ScoreEventListener {
 		score.setScoreValue(event.getScoreValue());
 		score.setScoreLetter(event.getScoreLetter());
 		score.setConfidence(event.getConfidence());
+		score.setCo2(event.getCo2());
+		score.setWater(event.getWater());
+		score.setEnergy(event.getEnergy());
 		score.setExplanations(event.getExplanations());
 		score.setCalculatedAt(event.getCalculatedAt());
 		scoreService.saveOrUpdate(score);
 	}
 }
-

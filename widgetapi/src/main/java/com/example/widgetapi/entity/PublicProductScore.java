@@ -32,6 +32,10 @@ public class PublicProductScore {
 	@Column(nullable = false)
 	private double confidence;
 
+	private Double co2;
+	private Double water;
+	private Double energy;
+
 	@ElementCollection
 	private List<String> explanations;
 
@@ -78,6 +82,30 @@ public class PublicProductScore {
 		this.confidence = confidence;
 	}
 
+	public Double getCo2() {
+		return co2;
+	}
+
+	public void setCo2(Double co2) {
+		this.co2 = co2;
+	}
+
+	public Double getWater() {
+		return water;
+	}
+
+	public void setWater(Double water) {
+		this.water = water;
+	}
+
+	public Double getEnergy() {
+		return energy;
+	}
+
+	public void setEnergy(Double energy) {
+		this.energy = energy;
+	}
+
 	public List<String> getExplanations() {
 		return explanations;
 	}
@@ -94,4 +122,3 @@ public class PublicProductScore {
 		this.calculatedAt = calculatedAt;
 	}
 }
-

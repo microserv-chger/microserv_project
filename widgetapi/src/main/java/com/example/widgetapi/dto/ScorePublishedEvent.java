@@ -11,6 +11,9 @@ public class ScorePublishedEvent {
 	private double scoreValue;
 	private String scoreLetter;
 	private double confidence;
+	private double co2;
+	private double water;
+	private double energy;
 	private List<String> explanations;
 	private Instant calculatedAt;
 
@@ -55,6 +58,30 @@ public class ScorePublishedEvent {
 
 	public void setConfidence(double confidence) {
 		this.confidence = confidence;
+	}
+
+	public double getCo2() {
+		return co2;
+	}
+
+	public void setCo2(double co2) {
+		this.co2 = co2;
+	}
+
+	public double getWater() {
+		return water;
+	}
+
+	public void setWater(double water) {
+		this.water = water;
+	}
+
+	public double getEnergy() {
+		return energy;
+	}
+
+	public void setEnergy(double energy) {
+		this.energy = energy;
 	}
 
 	public List<String> getExplanations() {
