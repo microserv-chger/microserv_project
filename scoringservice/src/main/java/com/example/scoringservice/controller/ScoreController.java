@@ -15,7 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.scoringservice.dto.ScoreComputeRequest;
 import com.example.scoringservice.dto.ScoreResponse;
+import com.example.scoringservice.entity.ProvenanceEntry;
 import com.example.scoringservice.repository.EcoScoreRepository;
+import com.example.scoringservice.repository.ProvenanceEntryRepository;
 import com.example.scoringservice.service.ScoringEngineService;
 
 @CrossOrigin(origins = "http://localhost:5173")
@@ -25,10 +27,13 @@ public class ScoreController {
 
 	private final ScoringEngineService scoringEngineService;
 	private final EcoScoreRepository repository;
+	private final ProvenanceEntryRepository provenanceRepository;
 
-	public ScoreController(ScoringEngineService scoringEngineService, EcoScoreRepository repository) {
+	public ScoreController(ScoringEngineService scoringEngineService, EcoScoreRepository repository,
+			ProvenanceEntryRepository provenanceRepository) {
 		this.scoringEngineService = scoringEngineService;
 		this.repository = repository;
+		this.provenanceRepository = provenanceRepository;
 	}
 
 	@PostMapping("/compute")
@@ -46,5 +51,11 @@ public class ScoreController {
 						new java.util.ArrayList<>(score.getExplanations()), score.getCalculatedAt()))
 				.map(ResponseEntity::ok)
 				.orElse(ResponseEntity.notFound().build());
+	}
+
+	@Transactional(readOnly = true)
+	@GetMapping("/provenance/{productId}")
+	public ResponseEntity<java.util.List<ProvenanceEntry>> getProvenance(@PathVariable UUID productId) {
+		return ResponseEntity.ok(provenanceRepository.findByProductIdOrderByTimestampAsc(productId));
 	}
 }
