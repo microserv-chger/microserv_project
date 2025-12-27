@@ -18,8 +18,10 @@ spring:
       group-id: scoring-service
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.value.default.type: com.example.scoringservice.dto.LcaComputedEvent
         spring.json.trusted.packages: "*"
         spring.json.type.mapping: "com.example.lcaliteservice.dto.LcaComputedEvent:com.example.scoringservice.dto.LcaComputedEvent"
     producer:

@@ -47,22 +47,40 @@ public class ScoringEngineService {
 		score.setScoreValue(normalizedValue);
 		score.setScoreLetter(letter);
 		score.setConfidence(confidence);
-		score.setExplanations(explanations);
+		score.setCo2(co2);
+		score.setWater(water);
+		score.setEnergy(energy);
+		if (score.getExplanations() == null) {
+			score.setExplanations(new java.util.ArrayList<>(explanations));
+		} else {
+			score.getExplanations().clear();
+			score.getExplanations().addAll(explanations);
+		}
 		score.setCalculatedAt(Instant.now());
 		EcoScore saved = repository.save(score);
 
 		eventProducer.publish(new ScorePublishedEvent(productId, saved.getId(), saved.getScoreValue(),
-				saved.getScoreLetter(), saved.getConfidence(), saved.getExplanations(), saved.getCalculatedAt()));
+				saved.getScoreLetter(), saved.getConfidence(), saved.getCo2(), saved.getWater(), saved.getEnergy(),
+				saved.getExplanations(), saved.getCalculatedAt()));
 
 		return new ScoreResponse(saved.getId(), saved.getProductId(), saved.getScoreValue(), saved.getScoreLetter(),
-				saved.getConfidence(), saved.getExplanations(), saved.getCalculatedAt());
+				saved.getConfidence(), saved.getCo2(), saved.getWater(), saved.getEnergy(),
+				saved.getExplanations(), saved.getCalculatedAt());
 	}
 
 	private double normalizeScore(double co2, double water, double energy) {
-		double co2Score = Math.max(0, 100 - co2);
-		double waterScore = Math.max(0, 100 - (water / 10));
-		double energyScore = Math.max(0, 100 - (energy * 2));
-		return Math.round(((co2Score * 0.5) + (waterScore * 0.3) + (energyScore * 0.2)) * 100.0) / 100.0;
+		// Benchmarks basés sur les données observées
+		// CO2: 0-10 kg -> 100-0
+		// Eau: 0-1000 L -> 100-0
+		// Energie: 0-50 MJ -> 100-0
+
+		double co2Score = Math.max(0, 100 * (1 - (co2 / 10.0)));
+		double waterScore = Math.max(0, 100 * (1 - (water / 1000.0)));
+		double energyScore = Math.max(0, 100 * (1 - (energy / 50.0)));
+
+		// Pondération: 50% CO2, 25% Eau, 25% Energie
+		double total = (co2Score * 0.5) + (waterScore * 0.25) + (energyScore * 0.25);
+		return Math.round(total * 100.0) / 100.0;
 	}
 
 	private String toLetter(double score) {
@@ -88,10 +106,10 @@ public class ScoringEngineService {
 	}
 
 	private List<String> buildExplanations(double co2, double water, double energy) {
-		return List.of(
-				"Empreinte carbone: " + co2 + " kg CO2e",
-				"Consommation d'eau: " + water + " L",
-				"Energie cumulée: " + energy + " MJ");
+		return new java.util.ArrayList<>(List.of(
+				String.format("Empreinte carbone: %.2f kg CO2e", co2),
+				String.format("Consommation d'eau: %.2f L", water),
+				String.format("Energie cumulée: %.2f MJ", energy),
+				"Pondération appliquée: 50% Carbone, 25% Eau, 25% Energie."));
 	}
 }
-

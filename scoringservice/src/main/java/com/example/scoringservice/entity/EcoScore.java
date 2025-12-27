@@ -31,7 +31,16 @@ public class EcoScore {
 	@Column(nullable = false)
 	private double confidence;
 
-	@ElementCollection
+	@Column(nullable = false)
+	private double co2;
+
+	@Column(nullable = false)
+	private double water;
+
+	@Column(nullable = false)
+	private double energy;
+
+	@ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
 	private java.util.List<String> explanations;
 
 	@Column(nullable = false)
@@ -92,5 +101,28 @@ public class EcoScore {
 	public void setCalculatedAt(Instant calculatedAt) {
 		this.calculatedAt = calculatedAt;
 	}
-}
 
+	public double getCo2() {
+		return co2;
+	}
+
+	public void setCo2(double co2) {
+		this.co2 = co2;
+	}
+
+	public double getWater() {
+		return water;
+	}
+
+	public void setWater(double water) {
+		this.water = water;
+	}
+
+	public double getEnergy() {
+		return energy;
+	}
+
+	public void setEnergy(double energy) {
+		this.energy = energy;
+	}
+}
