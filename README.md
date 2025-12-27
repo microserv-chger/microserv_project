@@ -147,3 +147,192 @@ Le projet intègre un **microservice Python** (`ml-service`) utilisant :
 - Sécurisation inter-services par OAuth2 client credentials / mTLS.
 - Fine-tuning des modèles BERT sur un dataset d'ingrédients français.
 
+
+
+
+## 🧩 Local Jenkins CI/CD Setup
+
+This project uses **Jenkins (local installation)** to automate deployment using **Docker Compose**.
+If you want to run the CI/CD pipeline on your own machine, follow the steps below.
+
+---
+
+## 1️⃣ Prerequisites
+
+Make sure the following tools are installed **and available in your system PATH**:
+
+### Required software
+
+* **Git**
+
+  ```bash
+  git --version
+  ```
+
+* **Docker Desktop** (Docker Compose must be enabled)
+
+  ```bash
+  docker --version
+  docker compose version
+  ```
+
+* **Java JDK 11 or later** (required by Jenkins)
+
+  ```bash
+  java -version
+  ```
+
+* **Jenkins (LTS recommended)**
+  👉 [https://www.jenkins.io/download/](https://www.jenkins.io/download/)
+
+---
+
+## 2️⃣ Jenkins Initial Configuration
+
+After installing Jenkins:
+
+1. Start Jenkins
+
+   * URL: `http://localhost:8080`
+
+2. Unlock Jenkins using the password located at:
+
+   ```text
+   <JENKINS_HOME>/secrets/initialAdminPassword
+   ```
+
+3. Install **Recommended Plugins**
+
+4. Create an **admin user**
+
+---
+
+## 3️⃣ Required Jenkins Plugins
+
+Ensure the following plugins are installed:
+
+* Pipeline
+* Git
+* Docker Pipeline
+* Blue Ocean (optional, for better UI)
+
+Check via:
+
+```
+Manage Jenkins → Plugins
+```
+
+---
+
+## 4️⃣ Create the Jenkins Pipeline Job
+
+1. Click **New Item**
+2. Choose **Pipeline**
+3. Enter a name (example: `microserv_project`)
+
+### Pipeline configuration
+
+* **Definition**: `Pipeline script from SCM`
+* **SCM**: `Git`
+* **Repository URL**:
+
+  ```text
+  https://github.com/microserv-chger/microserv_project.git
+  ```
+* **Branch**:
+
+  ```text
+  */main
+  ```
+* **Script Path**:
+
+  ```text
+  Jenkinsfile
+  ```
+
+Click **Save**.
+
+---
+
+## 5️⃣ Jenkinsfile Behavior (Important)
+
+The provided `Jenkinsfile` is **cross-platform**:
+
+* Uses `bat` on **Windows**
+* Uses `sh` on **Linux / macOS**
+
+👉 No modification is required.
+
+---
+
+## 6️⃣ Environment Requirements
+
+The Jenkins agent **must**:
+
+* Run on the same machine as Docker
+* Have permission to execute Docker commands
+* Have required ports available (e.g. `8080`, `8761`)
+
+---
+
+## 7️⃣ Running the Pipeline
+
+To deploy the application:
+
+1. Open the Jenkins job
+2. Click **Build Now**
+3. Monitor execution via:
+
+   * **Pipeline Overview**
+   * **Console Output**
+
+On success, Jenkins will:
+
+* Stop previous containers
+* Deploy the latest version using Docker Compose
+* Skip image rebuilds (`--no-build`)
+
+---
+
+## 8️⃣ Verifying Deployment
+
+After a successful build, verify containers are running:
+
+```bash
+docker compose ps
+```
+
+Expected:
+
+* All services show status **Up**
+
+Optional health check:
+
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+---
+
+## 9️⃣ Common Issues
+
+### ❌ `docker` command not found
+
+* Ensure Docker Desktop is running
+* Ensure Docker is in system PATH
+
+### ❌ Pipeline fails on `sh`
+
+* Ensure you are using the latest `Jenkinsfile` from the `main` branch
+
+---
+
+## 🔟 Notes
+
+* This setup is intended for **local development and testing**
+* For production usage, Jenkins should run on a dedicated server or container
+
+---
+
+✅ This guide ensures that any team member can reproduce the local CI/CD setup reliably.
+
