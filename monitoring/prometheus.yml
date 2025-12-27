@@ -12,8 +12,13 @@ scrape_configs:
           - authservice:8080
           - parserproduitservice:8081
           - nlpingredientservice:8082
-          - lcaliteservice:8083
           - scoringservice:8084
           - widgetapi:8085
           - eureka:8761
+
+  - job_name: lcalite
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - lcaliteservice:8083
 

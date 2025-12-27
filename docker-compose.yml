@@ -50,6 +50,33 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  minio:
+    image: minio/minio:RELEASE.2024-12-13T22-19-12Z
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9002:9000" # API
+      - "9003:9001" # Console
+    volumes:
+      - minio_data:/data
+
+  minio-mc:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do
+        echo 'Waiting for MinIO...';
+        sleep 2;
+      done;
+      mc mb --ignore-existing local/ecolabel-acv;
+      mc anonymous set download local/ecolabel-acv;
+      "
+
   eureka:
     build:
       context: ./eureka
@@ -131,18 +158,26 @@ services:
 
   lcaliteservice:
     build:
-      context: ./lcaliteservice
+      context: ./lcalite-fastapi
     container_name: lcaliteservice
     depends_on:
       - kafka
       - postgres
       - eureka
+      - minio
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/eco_label
-      SPRING_DATASOURCE_USERNAME: eco_user
-      SPRING_DATASOURCE_PASSWORD: eco_pass
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka
+      PORT: 8083
+      DATABASE_URL: postgresql://eco_user:eco_pass@postgres:5432/eco_label
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: lcalite-service
+      INGREDIENTS_TOPIC: ingredients.normalized
+      DLQ_TOPIC: ingredients.normalized.dlq
+      LCA_COMPLETED_TOPIC: lca.completed
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: ecolabel-acv
+      MINIO_SECURE: "false"
     ports:
       - "8083:8083"
     restart: always
@@ -204,3 +239,4 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:
